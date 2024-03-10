@@ -1,0 +1,293 @@
+---
+title: "Analysing Aston Villa's Case for the Champions League Spots"
+format: html
+code-fold: true
+output: asis
+warning: FALSE
+self-contained: true
+---
+
+```{r installing libraries, echo=FALSE, warning=FALSE, output=FALSE}
+library(worldfootballR)
+library(tidyverse)
+library(ggplot2)
+library(ggimage)
+library(ggtext)
+library(gt)
+library(gtExtras)
+```
+
+
+This Sunday (March 10) is a huge game in the race for the top four as Aston Villa receive the Tottenham Hotspurs at Villa Park. Both teams have had their ups and downs this season, mainly with injuries to key players, but they have also simply not performed at moments where they really should have. I point this out because, as a Spurs fan myself, I wanted to analyse this Villa team and see just how good they really are and if they really do have a chance of bearing us to that 4th Champions League spot. 
+
+First, some quick context with a glance at the league table so far.
+
+```{r}
+# Saving files for repoducability of results, since website updates constantly
+#   lg_rank_march9 <- fb_season_team_stats("ENG", "M", 2024, "1st", "league_table")
+#   write.csv(lg_rank_march9, 'lg_rank_march9.csv')
+
+lg_rank_march9 <- read.csv("lg_rank_march9.csv")
+lg_rank_march9 %>% arrange(Rk) %>% select(Rk, Squad, MP, W, D, L, Pts) %>% head(10) %>% 
+  gt() %>% 
+  # Note: Styling for tables & graphs has been intentionally omitted to protect brand-specific aesthetics.
+  gtsave("leage_positions_march9.png")
+```
+
+# Is Watkins better than Haaland?
+
+Starting off with a hot take, let's dive into Ollie Watkins form this season. It is obvious he has been **the** standout performer for his team, contributing 26 goals and assists, *more than any other player in the division*. But the question remains, is he better than Haaland? The stats say he is. 
+
+```{r}
+# watkins_overall <- fb_big5_advanced_season_stats(2024, 'standard', 'player') %>%
+#   filter(Comp == "Premier League")
+#   watkins_overall %>% write_csv("watkins_overall.csv")
+watkins_overall <- read.csv("watkins_overall.csv")
+
+watkins_overall %>% 
+  select(Player, Squad, Gls, Ast, `G.A`) %>%
+  rename(g_a = `G.A`) %>% 
+  arrange(-g_a) %>% 
+  head(10) %>% 
+  gt() %>% 
+  # Note: Styling for tables & graphs has been intentionally omitted to protect brand-specific aesthetics.
+  gtsave("watkins_goal_contributions.png")
+```
+
+That is, until we take a look under the hood at the underlying numbers. Some context is important here as well, since Haaland has missed 2 months. Despite his long layoff, Haaland sits top for Exepcted Goals, while Watkins lags behind at 4th. As always, Haaland leads almost every metric in the following table. From a quick comparison, it becomes apparent that Watkins has been more clinical than Haaland, as he is overachieving while Haaland has been underachieving, but more interestingly, it is in the assist numbers that Watkins really stands out. He has been overachieving his Expected Assists numbers by more than *double*, hinting that even though he is putting his teammates in good positions, it's because of them converting more chances than they realistically should that pads his assist stats.
+
+
+*Quick shoutout* to Cole Palmer, who is nowhere to be seen in the xG table, but sits amongst the top 10 for actual goals and assists. 
+
+```{r}
+watkins_overall %>% 
+  select(Player, Squad, xG_Expected, npxG_Expected, xAG_Expected, `npxG.xAG_Expected`) %>%
+  rename(xG = xG_Expected,
+         npxG = npxG_Expected,
+         xA = xAG_Expected,
+         npxG_xA = `npxG.xAG_Expected`) %>% 
+  arrange(-xG) %>% 
+  head(10) %>% 
+  gt() %>% 
+  # Note: Styling for tables & graphs has been intentionally omitted to protect brand-specific aesthetics.
+  gtsave("haaland_xg_king.png")
+```
+
+
+# The Supporting Cast of Villa Park
+
+With this in mind, who have been the other stand out performers for Aston Villa this season? After all, Watkins can't do everything himself, and as we have seen, he doesn't. 
+
+Seeing the overperfomance of Watkins assists means that other players in the team must be overperforming their xG numbers. Let's see who they have been. 
+
+```{r}
+gd_data <- watkins_overall %>% 
+  filter(Squad == "Aston Villa") %>% 
+  select(Player, Gls, xG_Expected, Min_Playing) %>% 
+  mutate(gd = Gls - xG_Expected) %>% 
+  filter(gd != 0) %>% 
+  mutate(Player = str_replace_all(Player, "Á", "A")) %>%
+  mutate(Player = str_replace_all(Player, "á", "a")) %>%
+  mutate(Player = str_replace_all(Player, "ò", "o")) %>%
+  mutate(Player = str_replace_all(Player, "é", "e")) %>%
+  
+  filter(Min_Playing >= 1000) %>% 
+  mutate(
+    gls_per_90min = (Gls / Min_Playing) * 90,
+    xg_per_90min = (xG_Expected / Min_Playing) * 90,
+    gd_adj = gls_per_90min - xg_per_90min
+  ) 
+ 
+goal_difference_plot <- 
+  gd_data %>% 
+  ggplot(aes(x = reorder(Player, +gd_adj), y = gd_adj)) +
+  geom_bar(stat = 'identity', width = 0.9, aes(fill = gd_adj)) +
+  scale_fill_gradient( low = "grey", high = "#orangy color here", guide = "colourbar", aesthetics = "fill") +
+  theme(
+    # Note: Styling for tables & graphs has been intentionally omitted to protect brand-specific aesthetics.
+        ) +
+  labs(title = "Aston Villa's Unsung Heros",
+       subtitle = "Players to overperform (and underperform) their xG",
+       x = "",
+       y = "Goals - xG (per 90 min)",
+       caption = "Stats by: Fbref.com\n Author: Esteban Sanchez") +
+  coord_flip()
+
+goal_difference_plot
+# ggsave("villas_unsung_heroes.png", plot = goal_difference_plot)
+
+```
+
+Leon Baily and Douglas Luiz lead the charts for the biggest overperformance in this Aston Villa team. John McGinn (a fellow lefty) and Pau Torres come close to Watkins. These are the players that have played solid minutes for Villa (more than 1000), so their impact can be said to be representative. 
+
+These numbers are pretty impressive, especially for Bailey and Luiz. At this rate, Bailey is expected to score an *extra* goal every 4 games, that is, **additionally** to the ones he already does score. It is thanks to these players that Watkins has had such impressive assist numbers, which explains why Aston Villa currently sits 4th in the league.
+
+## Strong Foundations
+
+Not everyone on a team can be a goalscorer. Sometimes what a team needs is a strong foundation, and it appears that is what Emery has created. In particular, 3 players deserve special recognition from this Villa team: **Douglas Luiz**, **John McGinn**, and **Ezri Konsa**. I leave out Ollie Watkins as he is the face of the team and everyone knows how good he is, and even though Bailey is overperforming goal-wise this season, he is not a nailed starter for the team and is not part of the foundation that these 3 players have created.
+
+
+```{r}
+# CREATING AND SAVING DATA NEEDED
+
+# prem_list = list()
+# 
+# for (stat_type in c("shooting", "passing", "gca", "defense")){
+#   temp <- fb_big5_advanced_season_stats(
+#     2024,
+#     stat_type,
+#     'player'
+#     ) %>%
+#     as_tibble()
+#   prem_list[[length(prem_list) + 1]] <- temp
+# }
+# 
+# prem_overall <- bind_cols(prem_list)
+# prem_overall <- prem_overall %>% 
+#   select(Season_End_Year...1, Squad...2, Comp...3, Player...4, Sh_Standard, SoT_Standard, 
+#          Cmp_Total, Att_Total, Cmp_percent_Total, TotDist_Total, PrgDist_Total, Final_Third, PPA,
+#          SCA_SCA, TO_SCA, PassLive_SCA, Sh_SCA, Fld_SCA, Def_SCA, GCA_GCA, PassLive_GCA, TO_GCA, Sh_GCA,
+#          Fld_GCA, Def_GCA, TklW_Tackles, `Def 3rd_Tackles`, `Mid 3rd_Tackles`, `Att 3rd_Tackles`, 
+#          Tkl_Challenges, Att_Challenges, Tkl_percent_Challenges, Blocks_Blocks, Sh_Blocks, Pass_Blocks,
+#          Int, `Tkl+Int`, Clr, Err)
+# 
+# prem_overall <- prem_overall %>% 
+#   rename(
+#     SeasonEndYear = Season_End_Year...1,
+#     Squad = Squad...2,
+#     Comp = Comp...3,
+#     Player = Player...4,
+#     def_3rd_tackles = `Def 3rd_Tackles`,
+#     mid_3rd_tackles = `Mid 3rd_Tackles`,
+#     att_3rd_tackles = `Att 3rd_Tackles`,
+#     tkl_plus_int = `Tkl+Int`
+#   )
+# 
+# prem_overall <- prem_overall %>% 
+#   filter(Comp == "Premier League")
+# 
+# write_csv(prem_overall, "prem_overall.csv")
+```
+
+
+Starting from the defence, Erick Konsa has been outstanding. He is in the top 15 of players for Pass Completion Percentage and is *top of the league* for Percentage of Tackles Won (amognst players with more than 10 tackles in the season). These stats show how he is composed at the back, helping Villa play out with the ball, allowing for more control throughout games, but more importantly, he is also there when he is needed to step in, winning the ball back 89.5% of the time.
+
+```{r}
+prem_overall <- read.csv("prem_overall.csv")
+
+prem_overall %>% 
+  map_team_logos() %>% 
+  filter(TklW_Tackles > 10) %>% 
+  group_by(Player, squad_image) %>% 
+  summarise(tkl = mean(Tkl_percent_Challenges)) %>% 
+  arrange(-tkl) %>% 
+  select(squad_image, everything()) %>% 
+  head(10) %>% 
+  ungroup() %>% 
+  mutate(tkl = tkl / 100) %>% 
+  gt() %>% 
+  # Note: Styling for tables & graphs has been intentionally omitted to protect brand-specific aesthetics.
+  gtsave("konsas_tackles.png")
+```
+
+
+
+Moving further up the field, let's discuss the skipper, John McGinn. He is the motor of this team, and as the captain, he leads by example. He is one of those players where you love to play with him but hate to play against him. As a rival team supporter, I fear for any player whenever I see McGinn sprinting full throttle at them. Using a so-called "Hustle Stat," we can see how he leaves his heart out on the field, as he ranks in the top 10 for most Tackles in the Middle Third. Apart from his hustle, his impact is also seen in the attacking metrics. He ranks in the top 20 for Goal Creating Actions, 13th for Passes into the Final Third, and 9th for Live Ball Passes that Lead to a Shot Attempt. Maybe some more assists in his name would be appropriate for the type of season he is having, yet, he doesn't seem to care. 
+
+
+Finally, a more attacking midfielder that deserves some credit is Douglas Luiz. We already saw how he is overperforming his xG this season, and he is also the dedicated penalty taker, even *over* Watkins. For him, I will also point out that he is in the top 20 for Passes into the Penalty Area, and something the stats won't show is how regularly he crashes the box to sniff out those rebounds, potentially providing an explanation as to why he has been scoring so much this season. 
+
+
+# A Real Rivalry?
+
+After taking a deeper dive into Villa's players, I am still not able to answer the question of whether they realistically have a chance to pip Spurs to that coveted 4th spot. Let's compare the teams directly in order to see their respective seasons.
+
+Aston Villa are above Spurs when it comes to Goal Creating Actions, which, at the end of the day, are what help you win games. Not only are they above Spurs, but they are also above title challengers Liverpool, though just barely. At this point in the season, we have seen enough games to assume that the data is representative of each team's ability to create goals. This is a strong argument for Villa's top 4 hopes.
+
+```{r}
+gca_plot <- prem_overall %>% 
+  group_by(Squad) %>% 
+  summarise(gca = sum(GCA_GCA, na.rm = T)) %>% 
+  arrange(-gca) %>% 
+  mutate(FillColor = ifelse(Squad %in% c("Aston Villa", "Tottenham"), "COLOR_STAND_OUT", "grey")) %>%
+  head(10) %>% 
+  ggplot(aes(x = reorder(Squad, +gca), y = gca)) +
+  geom_bar(stat = "identity", color = "white", size = 1.5, aes(fill = FillColor)) +
+  scale_fill_identity() +
+  theme(
+    # Note: Styling for tables & graphs has been intentionally omitted to protect brand-specific aesthetics.
+        ) +
+  labs(title = "Villa are Masters at Creating Goals This Season",
+       subtitle = "Top 10 Teams for Goal Creating Actions Premier League 2023-24",
+       x = "",
+       y = "Goal Creating Actions") +
+  coord_flip()
+
+gca_plot
+# ggsave("gca_plot.png", plot = gca_plot)
+```
+
+However, looking at a broader range of attacking metrics, Spurs seem to rank a bit better than Villa in a lot of them. In the following table, we can see some stats such as Shots, Shots on Target, Passes into the Final Third, and Passes into the Penalty Area, and Spurs have just about better metrics in all of them. Again, all these metrics are good, but if they can't create Goal Actions like Villa then there is no point in passing it into the final third for example.
+
+```{r}
+att_metrics <- prem_overall %>% 
+  group_by(Squad) %>% 
+  summarise(shots = sum(Sh_Standard, na.rm = T), 
+            sot = sum(SoT_Standard, na.rm = T), 
+            ft = sum(Final_Third, na.rm = T), 
+            ppa = sum(PPA, na.rm = T))
+  
+att_metrics <- left_join(att_metrics, lg_rank_march9 %>% select(Squad, Rk), by = "Squad") %>% 
+  select(Rk, everything()) %>% 
+  arrange(Rk) %>% head(10)
+
+att_metrics %>% 
+  gt() %>% 
+  # Note: Styling for tables & graphs has been intentionally omitted to protect brand-specific aesthetics.
+  gtsave("attacking_metrics_top10_teams.png")
+```
+
+
+## Expected Upset (xU)?
+
+It is normally agreed that one of, if not the best, attacking metrics to judge a team's attacking threat is Non-Penalty Expected Goals Per 90. Plotted against actual Goals Per 90, we can see that Liverpool are performing almost exactly as expected, while Arsenal and Man City might be slightly overperforming. However, of interest to us are Tottenham and Villa, the teams fighting for that 4th spot. We see Tottenham right in the mix of the clusters created by the teams challenging for the title. They are also **under**performing their xG, giving Spurs fans hope that their players (*cough cough Timo Werner*) will soon start to convert more of the chances they should score in. On the other hand, Villa are some ways behind both in threat and actual output, and they are in fact **over**performing, as we have previously seen many of their players do, suggesting that this run of goals might be unsustainable.
+
+```{r}
+xg_plot <- watkins_overall %>% 
+  filter(Min_Playing > mean(Min_Playing)*1.1) %>% 
+  group_by(Squad) %>% 
+  summarise(npxg = sum(npxG_Per, na.rm = T),
+            npg = sum(Gls_Per, na.rm = T)) %>% 
+  map_team_logos() # INTERNAL FUNCTION TO CREATE LOGOS. Files are saved locally, omitting function for privacy reasons.
+
+min_y = min(xg_plot$npg)
+max_y = max(xg_plot$npg)
+min_x = min(xg_plot$npxg)
+max_x = max(xg_plot$npxg)
+
+xg_plot_final <- 
+  xg_plot %>% 
+  ggplot() +
+  geom_image(aes(x = npxg, y = npg, image = squad_image_url), size = 0.2) +
+  theme(
+        # Note: Styling for tables & graphs has been intentionally omitted to protect brand-specific aesthetics.
+        ) +
+  xlim(min_x - 0.1, max_x + 0.1) +
+  ylim(min_y - 0.1, max_y + 0.1) +
+  labs(title = "Expected Upset for Villa?",
+       subtitle = "Non-Penalty Goals and xG Per 90 - Premier League 2023-24",
+       x = "Non Penalty Expected Goals (Per 90)",
+       y = "Non Penalty Goals (Per 90)",
+       caption = "Data from: Fbref\nGraph by: Esteban Sanchez")
+
+xg_plot_final
+# ggsave("xg_plot.png", plot = xg_plot_final, width = 12)
+
+```
+
+
+# After all this, who is going to be playing Champions League Football in 2024–25?
+
+From everything I have explored, I am confident that Aston Villa, as much as I respect the team, the players, and the coach, will not beat Tottenham to 4th place by the end of the season. I do want to mention that both teams are in the early stages of a new project, Villa with Emery and Spurs with Postecoglou, and they have both done an incredible job so far this season, pronably better than anyone thought. The foundation for Villa is there in the players explored previously, but with an ageing McGinn and really the first good season of Douglas Luiz, they might not be completely ready for a final push this season.
+
+There is only a 5 point difference between them, with Spurs a game behind and a head-to-head in the next matchweek. Most of the stats favour Tottenham to keep on being a bigger attacking threat, and if this continues for the run-in, they might just clinch Champions League football next season, at the expense of an amazing team in Aston Villa.
