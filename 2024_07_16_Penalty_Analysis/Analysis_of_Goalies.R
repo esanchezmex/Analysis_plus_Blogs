@@ -4,7 +4,7 @@ library(tidyverse)
 library(StatsBombR)
 library(gt)
 
-all_shots_clustered <- read.csv("~/Desktop/Goalie Analysis/all_shots_clustered.csv")
+all_shots_clustered <- read.csv("2024_07_16_Penalty_Analysis/all_shots_clustered.csv")
 
 all_shots_clustered %>% 
   group_by(Cluster) %>% 
@@ -330,6 +330,89 @@ keeper_data %>%
   ) %>% 
   gtsave("good_pens_saved.png")
   
+
+
+
+# COMBINED TABLE FOR EASY READ
+keeper_list <- c("Alisson Ramsés Becker", 
+                 "Damián Emiliano Martínez",
+                 "Danijel Subašić", 
+                 "David de Gea Quintana",
+                 "David Ospina Ramírez", 
+                 "Dimitry Bertaud", 
+                 "Diogo Meireles Costa",
+                 "Dominik Livaković", 
+                 "Edouard Mendy", 
+                 "Gianluigi Donnarumma", 
+                 "Hugo Lloris",
+                 "Igor Akinfeev", 
+                 "Jordan Pickford", 
+                 "Kasper Schmeichel",
+                 "Lionel Mpasi-Nzau", 
+                 "Mohamed Abougaba", 
+                 "Ronwen Williams", 
+                 "Unai Simón Mendibil",
+                 "Yahia Fofana", 
+                 "Yann Sommer", 
+                 "Yassine Bounou")
+
+# Calculate all metrics in one pipeline
+combined_stats <- keeper_data %>% 
+  filter(goalkeeper.name %in% keeper_list) %>% 
+  group_by(goalkeeper.name) %>% 
+  summarise(
+    overall_save_pct = sum(shot.outcome.name == "Saved") / n(),
+    good_pens_faced_pct = sum(good_pen == 1) / n(),
+    good_pens_saved_pct = ifelse(
+      sum(good_pen == 1) == 0, 
+      NA_real_,  # or use 0 instead of NA_real_
+      sum(shot.outcome.name == "Saved" & good_pen == 1) / sum(good_pen == 1)
+    )
+  ) %>% 
+  arrange(-good_pens_saved_pct)
+
+# Create the combined gt table
+combined_stats %>% 
+  gt() %>% 
+  sub_missing(
+    columns = everything(),
+    missing_text = "-"  # or "N/A" or ""
+  ) %>% 
+  tab_header(
+    title = md("**Goalkeeper Penalty Performance**"),
+    subtitle = "(FIFA World Cup, UEFA Euro, AFCON)"
+  ) %>% 
+  fmt_percent(
+    columns = c(overall_save_pct, good_pens_faced_pct, good_pens_saved_pct),
+    decimals = 1
+  ) %>% 
+  cols_label(
+    goalkeeper.name ~ "Goalkeeper",
+    overall_save_pct ~ "Overall Save %",
+    good_pens_faced_pct ~ "% Good Pens Faced",
+    good_pens_saved_pct ~ "Good Pens Saved %"
+  ) %>% 
+  data_color(
+    columns = overall_save_pct,
+    palette = c('white', "lightblue")
+  ) %>% 
+  data_color(
+    columns = good_pens_faced_pct,
+    palette = c('white', "lightblue")
+  ) %>% 
+  data_color(
+    columns = good_pens_saved_pct,
+    palette = c('white', "lightgreen")
+  ) %>% 
+  tab_style(
+    locations = cells_column_labels(),
+    style = cell_borders(sides = c("top", "bottom"), weight = 1)
+  ) %>% 
+  # tab_spanner(
+  #   label = "Performance Metrics",
+  #   columns = c(overall_save_pct, good_pens_faced_pct, good_pens_saved_pct)
+  # ) %>% 
+  gtsave("combined_keeper_stats.png")
 
 
 
